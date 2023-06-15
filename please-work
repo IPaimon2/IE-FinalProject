@@ -1,0 +1,196 @@
+#include <iostream>
+#include <random>
+#include <SFML/Graphics.hpp>
+
+const int WINDOW_WIDTH = 1800;
+const int WINDOW_HEIGHT = 900;
+int GRID_SIZE = 20;
+int SNAKE_SIZE = 40; // Actual size of the snake's body
+
+class CollisionDetection {
+public:
+    static bool checkCollision(const sf::Sprite& sprite1, const sf::Sprite& sprite2) {
+        return sprite1.getGlobalBounds().intersects(sprite2.getGlobalBounds());
+    }
+};
+
+class SnakeController {
+public:
+    void moveSnake(sf::Sprite& snake, float deltaTime, float speed, float windowWidth, float windowHeight) {
+        // Move the snake based on its current position, direction, and speed
+        sf::Vector2f position = snake.getPosition();
+        position.x += velocity.x * speed * deltaTime;
+        position.y += velocity.y * speed * deltaTime;
+
+        // Prevent the snake from crossing the window borders
+        if (position.x < 0) {
+            position.x = 0;
+            velocity.x = 0; // Stop horizontal movement
+        } else if (position.x + SNAKE_SIZE >= windowWidth) {
+            position.x = windowWidth - SNAKE_SIZE;
+            velocity.x = 0; // Stop horizontal movement
+        }
+
+        if (position.y < 0) {
+            position.y = 0;
+            velocity.y = 0; // Stop vertical movement
+        } else if (position.y + SNAKE_SIZE >= windowHeight) {
+            position.y = windowHeight - SNAKE_SIZE;
+            velocity.y = 0; // Stop vertical movement
+        }
+
+        // Update the snake's position
+        snake.setPosition(position);
+    }
+    void setVelocity(const sf::Vector2f& newVelocity) {
+        velocity = newVelocity;
+    }
+
+    sf::Vector2f getVelocity() const {
+        return velocity;
+    }
+
+private:
+    sf::Vector2f velocity;
+};
+
+class RandomSnakeSpawner {
+public:
+    RandomSnakeSpawner() : gen(rd()), disDirection(-1.0f, 1.0f) {} // Initialize the random generator and direction distribution in the constructor
+
+    std::vector<sf::Sprite> spawnSnakes(int numSnakes, float windowWidth, float windowHeight) {
+        std::vector<sf::Sprite> snakes;
+
+        // Load the snake texture from the PNG file
+        sf::Texture snakeTexture;
+        if (!snakeTexture.loadFromFile("bigsnake.png")) {
+            // Failed to load the texture, handle the error
+            std::cerr << "Failed to load snake texture!" << std::endl;
+        }
+
+        std::uniform_real_distribution<float> disPositionX(0, windowWidth - SNAKE_SIZE);
+        std::uniform_real_distribution<float> disPositionY(0, windowHeight - SNAKE_SIZE);
+
+        for (int i = 0; i < numSnakes; i++) {
+            sf::Sprite snake;
+            snake.setTexture(snakeTexture);
+
+            // Generate random position for the current snake
+            sf::Vector2f position(disPositionX(gen), disPositionY(gen));
+            snake.setPosition(position);
+
+            std::cout << "Spawned snake at position: (" << position.x << ", " << position.y << ")" << std::endl;
+
+            sf::Vector2f direction(disDirection(gen), disDirection(gen));
+            snakeController.setVelocity(direction);
+
+            snakes.push_back(snake);
+        }
+
+        return snakes;
+    }
+
+    void moveSnakes(std::vector<sf::Sprite>& snakes, float deltaTime, float speed, float windowWidth, float windowHeight) {
+        for (auto& snake : snakes) {
+            sf::Vector2f velocity(snakeController.getVelocity());
+            snakeController.setVelocity(velocity);
+
+            snakeController.moveSnake(snake, deltaTime, speed, windowWidth, windowHeight);
+        }
+    }
+
+    SnakeController snakeController;
+    std::random_device rd;
+    std::mt19937 gen;
+    std::uniform_real_distribution<float> disDirection;
+};
+
+int main()
+{
+    sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "Snake Game");
+
+    sf::View view(sf::FloatRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT));
+    view.setCenter(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2);
+    window.setView(view);
+
+    sf::Texture snakeTexture;
+    if (!snakeTexture.loadFromFile("hertaa.gif")) {
+        // Handle error if the image fails to load
+        std::cerr << "Failed to load snake texture!" << std::endl;
+        return 1;
+    }
+
+    sf::Sprite snakeHead;
+    snakeHead.setTexture(snakeTexture);
+    snakeHead.setScale(0.5f, 0.5f); // Scale the sprite down to 50% of its original size
+
+    RandomSnakeSpawner snakeSpawner;
+    std::vector<sf::Sprite> snakes = snakeSpawner.spawnSnakes(3, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+    // Position the main snake in the center of the window
+    snakeHead.setPosition(WINDOW_WIDTH / 2 - SNAKE_SIZE / 2, WINDOW_HEIGHT / 2 - SNAKE_SIZE / 2);
+
+    SnakeController& snakeController = snakeSpawner.snakeController; // Use the same instance of SnakeController
+
+    sf::Clock clock;
+    sf::Time elapsed;
+    sf::Vector2f currentVelocity(0.0f, 0.0f); // Current velocity for the main snake
+
+    while (window.isOpen())
+    {
+        sf::Event event;
+        while (window.pollEvent(event))
+        {
+            if (event.type == sf::Event::Closed)
+                window.close();
+
+            if (event.type == sf::Event::KeyPressed)
+            {
+                // Control the main snake based on the arrow keys
+                if (event.key.code == sf::Keyboard::Up)
+                    currentVelocity = sf::Vector2f(0.0f, -1.0f);
+                else if (event.key.code == sf::Keyboard::Down)
+                    currentVelocity = sf::Vector2f(0.0f, 1.0f);
+                else if (event.key.code == sf::Keyboard::Left)
+                    currentVelocity = sf::Vector2f(-1.0f, 0.0f);
+                else if (event.key.code == sf::Keyboard::Right)
+                    currentVelocity = sf::Vector2f(1.0f, 0.0f);
+            }
+        }
+
+        elapsed += clock.restart();
+        if (elapsed.asMilliseconds() > 100) // Snake movement speed
+        {
+            // Set the velocity for the main snake
+            snakeController.setVelocity(currentVelocity);
+            snakeController.moveSnake(snakeHead, elapsed.asSeconds(), 200.0f, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+
+
+            // Check collision of the main snake with spawned snakes
+            for (const auto& snake : snakes) {
+                if (CollisionDetection::checkCollision(snakeHead, snake)) {
+                    // Snake collided with a spawned snake, stop the main snake's movement
+                    currentVelocity = sf::Vector2f(0.0f, 0.0f);
+                    break;
+                }
+            }
+
+            // Print the position of the main snake
+            std::cout << "Main snake position: (" << snakeHead.getPosition().x << ", " << snakeHead.getPosition().y << ")" << std::endl;
+
+            elapsed = sf::Time::Zero;
+        }
+
+        window.clear(sf::Color::Red);
+        window.draw(snakeHead);
+
+        for (const auto& snake : snakes) {
+            window.draw(snake);
+        }
+
+        window.display();
+    }
+
+    return 0;
+}
